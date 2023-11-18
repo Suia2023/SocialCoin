@@ -18,7 +18,7 @@ tasks:
       - Move.toml
   demo:
     cmds:
-      - pnpm ts-node examples/suibox.ts
+      - pnpm demo
     sources:
       - src/**/*.ts
       - examples/**/*.ts

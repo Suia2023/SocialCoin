@@ -1,0 +1,50 @@
+name: ci
+
+on: ["push", "pull_request", "workflow_dispatch"]
+
+env:
+  VERSION: mainnet-v1.13.0
+
+jobs:
+  test_and_demo:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [19.x]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cache Binaries and move deps
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.move
+            ~/bin
+            **/node_modules
+          key: ${{ runner.os }}-cache-${{ env.VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-cache-
+      - run: echo "${HOME}/bin" >> $GITHUB_PATH
+      - name: install sui bin
+        run: |
+          mkdir -p ~/bin
+          cd ~/bin
+          wget https://github.com/MystenLabs/sui/releases/download/${{ env.VERSION }}/sui-${{ env.VERSION }}-ubuntu-x86_64.tgz
+          tar -xvzf sui-${{ env.VERSION }}-ubuntu-x86_64.tgz
+          cp ./target/release/sui-ubuntu-x86_64 sui
+          chmod +x ~/bin/sui
+        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Install Task
+        uses: arduino/setup-task@v1
+      - run: task build
+      - run: task test
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: pnpm/action-setup@v2.2.4
+        with:
+          version: 8.6.2
+      - run: pnpm install
+      - run: cp .env.example .env
+      - run: REQUEST_SUI=1 task demo

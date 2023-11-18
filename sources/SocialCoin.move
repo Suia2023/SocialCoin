@@ -11,7 +11,7 @@ module socialcoin::socialcoin {
     #[test_only]
     use sui::test_scenario::{Self, return_shared, return_to_address};
     #[test_only]
-    use sui::coin::{mint_for_testing, burn_for_testing};
+    use sui::coin::{mint_for_testing};
 
     // errors
     const ERR_ONLY_SHARES_SUBJECT_CAN_BUY_FIRST_SHARE: u64 = 1;
@@ -168,7 +168,7 @@ module socialcoin::socialcoin {
         global: &mut Global,
         subject: address,
         amount: u64,
-        coin: &mut Coin<sui::SUI>,
+        coin: Coin<sui::SUI>,
         ctx: &mut TxContext,
     ) {
         let trader = sender(ctx);
@@ -179,7 +179,7 @@ module socialcoin::socialcoin {
         let price = get_price(supply, amount);
         let protocol_fee = price * global.config.protocol_fee_percent / 1000000000;
         let subject_fee = price * global.config.subject_fee_percent / 1000000000;
-        assert!(coin::value(coin) >= price + protocol_fee + subject_fee, ERR_INSUFFICIENT_COIN);
+        assert!(coin::value(&coin) >= price + protocol_fee + subject_fee, ERR_INSUFFICIENT_COIN);
         change_table_value(&mut subject_share.holders, trader, amount, true);
         subject_share.supply = supply + amount;
         change_holding_data(global, trader, subject, amount, true, ctx);
@@ -195,14 +195,15 @@ module socialcoin::socialcoin {
         });
 
         if (price > 0) {
-            balance::join(&mut global.vault, coin::into_balance(coin::split(coin, price, ctx)));
+            balance::join(&mut global.vault, coin::into_balance(coin::split(&mut coin, price, ctx)));
         };
         if (protocol_fee > 0) {
-            public_transfer(coin::split(coin, protocol_fee, ctx), global.config.protocol_fee_destination);
+            public_transfer(coin::split(&mut coin, protocol_fee, ctx), global.config.protocol_fee_destination);
         };
         if (subject_fee > 0) {
-            public_transfer(coin::split(coin, subject_fee, ctx), subject);
+            public_transfer(coin::split(&mut coin, subject_fee, ctx), subject);
         };
+        public_transfer(coin, trader);
     }
 
     fun transfer_from_vault(
@@ -284,12 +285,10 @@ module socialcoin::socialcoin {
         test_scenario::next_tx(scenario, user1);
         let global = test_scenario::take_shared<Global>(scenario);
         let coin = mint_for_testing<sui::SUI>(1000000000, test_scenario::ctx(scenario));
-        buy_shares(&mut global, user1, 1, &mut coin, test_scenario::ctx(scenario));
+        buy_shares(&mut global, user1, 1, coin, test_scenario::ctx(scenario));
         // the first share is free, so the price is 0
         let vault_balance_after_user1_buy_user1 = balance::value(&global.vault);
         assert!(vault_balance_after_user1_buy_user1 == 0, 0);
-        let coin_balance_after_user1_buy_user1 = coin::value(&coin);
-        assert!(coin_balance_after_user1_buy_user1 == 1000000000, 0);
         let user1_share = table::borrow(&global.shares, user1);
         assert!(table::length(&user1_share.holding) == 1, 0);
         assert!(table::length(&user1_share.holders) == 1, 0);
@@ -298,7 +297,8 @@ module socialcoin::socialcoin {
 
         // user2 buy user1's share
         test_scenario::next_tx(scenario, user2);
-        buy_shares(&mut global, user1, 1, &mut coin, test_scenario::ctx(scenario));
+        let coin2 = mint_for_testing<sui::SUI>(1000000000, test_scenario::ctx(scenario));
+        buy_shares(&mut global, user1, 1, coin2, test_scenario::ctx(scenario));
 
         test_scenario::next_tx(scenario, user2);
         let price1 = get_price(1, 1);
@@ -306,11 +306,6 @@ module socialcoin::socialcoin {
         let subject_fee1 = price1 * global.config.subject_fee_percent / 1000000000;
         let vault_balance_after_user2_buy_user1 = balance::value(&global.vault);
         assert!(vault_balance_after_user2_buy_user1 == price1, 0);
-        let coin_balance_after_user2_buy_user1 = coin::value(&coin);
-        assert!(
-            coin_balance_after_user2_buy_user1 == coin_balance_after_user1_buy_user1 - price1 - protocol_fee1 - subject_fee1,
-            0
-        );
         let expected_subject_fee1 = test_scenario::take_from_address<Coin<sui::SUI>>(scenario, user1);
         assert!(coin::value(&expected_subject_fee1) == subject_fee1, 0);
         let expected_protocol_fee1 = test_scenario::take_from_address<Coin<sui::SUI>>(scenario, admin);
@@ -338,7 +333,6 @@ module socialcoin::socialcoin {
         assert!(balance::value(&global.vault) == 0, 0);
 
         // end test
-        burn_for_testing(coin);
         return_shared(global);
         test_scenario::end(scenario_val);
     }
