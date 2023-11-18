@@ -1,0 +1,24 @@
+# https://taskfile.dev
+
+version: "3"
+
+tasks:
+  build:
+    cmds:
+      - sui move build
+      - echo "build done"
+    sources:
+      - sources/**/*.move
+      - Move.toml
+  test:
+    cmds:
+      - sui move test
+    sources:
+      - sources/**/*.move
+      - Move.toml
+  demo:
+    cmds:
+      - pnpm ts-node examples/suibox.ts
+    sources:
+      - src/**/*.ts
+      - examples/**/*.ts
