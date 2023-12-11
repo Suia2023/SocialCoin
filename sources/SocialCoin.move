@@ -74,8 +74,8 @@ module socialcoin::socialcoin {
             id: object::new(ctx),
             config: Config {
                 protocol_fee_destination: sender(ctx),
-                protocol_fee_percent: 50000000,
-                subject_fee_percent: 50000000,
+                protocol_fee_percent: 30000000,
+                subject_fee_percent: 20000000,
             },
             shares: table::new(ctx),
             vault: balance::zero(),
@@ -100,7 +100,7 @@ module socialcoin::socialcoin {
         let sum1 = if (supply == 0) { 0 } else { (supply - 1) * (supply) * (2 * (supply - 1) + 1) / 6 };
         let sum2 = if (supply == 0 && amount == 1) { 0 } else { (supply - 1 + amount) * (supply + amount) * (2 * (supply - 1 + amount) + 1) / 6 };
         let summation = sum2 - sum1;
-        summation * 1000000000 / 16000
+        summation * 100000000
     }
 
     public fun get_buy_price(global: &Global, subject: address, amount: u64): u64 {
