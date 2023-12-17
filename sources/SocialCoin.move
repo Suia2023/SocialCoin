@@ -297,11 +297,12 @@ module socialcoin::socialcoin {
 
         // user2 buy user1's share
         test_scenario::next_tx(scenario, user2);
-        let coin2 = mint_for_testing<sui::SUI>(1000000000, test_scenario::ctx(scenario));
-        buy_shares(&mut global, user1, 1, coin2, test_scenario::ctx(scenario));
+        let coin2 = mint_for_testing<sui::SUI>(100000000000, test_scenario::ctx(scenario));
+        let amount = 10;
+        buy_shares(&mut global, user1, amount, coin2, test_scenario::ctx(scenario));
 
         test_scenario::next_tx(scenario, user2);
-        let price1 = get_price(1, 1);
+        let price1 = get_price(1, amount);
         let protocol_fee1 = price1 * global.config.protocol_fee_percent / 1000000000;
         let subject_fee1 = price1 * global.config.subject_fee_percent / 1000000000;
         let vault_balance_after_user2_buy_user1 = balance::value(&global.vault);
@@ -315,11 +316,11 @@ module socialcoin::socialcoin {
         let user1_share = table::borrow(&global.shares, user1);
         assert!(table::length(&user1_share.holding) == 1, 0);
         assert!(table::length(&user1_share.holders) == 2, 0);
-        assert!(*table::borrow(&user1_share.holders, user2) == 1, 0);
+        assert!(*table::borrow(&user1_share.holders, user2) == amount, 0);
         let user2_share = table::borrow(&global.shares, user2);
         assert!(table::length(&user2_share.holding) == 1, 0);
         assert!(table::length(&user2_share.holders) == 0, 0);
-        assert!(*table::borrow(&user2_share.holding, user1) == 1, 0);
+        assert!(*table::borrow(&user2_share.holding, user1) == amount, 0);
 
         // user2 sell user1's share
         test_scenario::next_tx(scenario, user2);
@@ -327,9 +328,13 @@ module socialcoin::socialcoin {
         test_scenario::next_tx(scenario, user2);
 
         let user1_share = table::borrow(&global.shares, user1);
-        assert!(*table::borrow(&user1_share.holders, user2) == 0, 0);
+        assert!(*table::borrow(&user1_share.holders, user2) == amount - 1, 0);
         let user2_share = table::borrow(&global.shares, user2);
-        assert!(*table::borrow(&user2_share.holding, user1) == 0, 0);
+        assert!(*table::borrow(&user2_share.holding, user1) == amount - 1, 0);
+
+        test_scenario::next_tx(scenario, user2);
+        sell_shares(&mut global, user1, amount - 1, test_scenario::ctx(scenario));
+        test_scenario::next_tx(scenario, user2);
         assert!(balance::value(&global.vault) == 0, 0);
 
         // end test
