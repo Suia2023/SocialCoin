@@ -184,6 +184,36 @@ class SocialCoin {
     return BigInt(result);
   }
 
+  async getIssuePriceAfterFee(issueAmount: bigint): Promise<bigint> {
+    if (issueAmount == 0n) {
+      throw new Error('issue amount must be greater than 0');
+    }
+    if (issueAmount == 1n) {
+      return 0n;
+    }
+    tx = new TransactionBlock();
+    tx.moveCall({
+      target: `${this.packageId}::socialcoin::get_price`,
+      arguments: [tx.pure(1), tx.pure(issueAmount - 1n)],
+    });
+    const devRes = await this.client.devInspectTransactionBlock({
+      // sender: '0x729bc9d2c95162733899493e559044e6e3a88bc6e5d42177d429354d8420e6a4',
+      sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      transactionBlock: tx,
+    });
+    console.log('getBuyPrice', JSON.stringify(devRes, null, 2));
+    const result = bcs.u64().parse(Uint8Array.from((devRes as any).results[0].returnValues[0][0]));
+    const price = BigInt(result);
+    console.log('price', price);
+    const global = await this.getGlobalObject();
+    console.log('global', JSON.stringify(global, null, 2));
+    const protocol_fee_percent = (global.data!.content as any).fields.config.fields.protocol_fee_percent;
+    const subject_fee_percent = (global.data!.content as any).fields.config.fields.subject_fee_percent;
+    const protocol_fee = (price * BigInt(protocol_fee_percent)) / 1000000000n;
+    const subject_fee = (price * BigInt(subject_fee_percent)) / 1000000000n;
+    return price + protocol_fee + subject_fee;
+  }
+
   async getGlobalObject() {
     const global = await client.getObject({
       id: this.globalId,
@@ -247,6 +277,40 @@ class SocialCoin {
     return holding;
   }
 
+  // issue social coin, can only be called by self, can determine amount of self buy
+  async issue(signer: Ed25519Keypair, buyAmount: bigint) {
+    const subject = signer.toSuiAddress();
+    const coinAmount = await this.getIssuePriceAfterFee(buyAmount);
+    const balance = await this.client.getBalance({ owner: signer.toSuiAddress() });
+    console.log({
+      coinAmount,
+      balance,
+    });
+    tx = new TransactionBlock();
+    if (buyAmount == 1n) {
+      const [zeroCoin] = tx.splitCoins(tx.gas, [tx.pure(0)]);
+      tx.moveCall({
+        target: `${this.packageId}::socialcoin::buy_shares`,
+        arguments: [tx.object(this.globalId), tx.pure(subject), tx.pure(1), zeroCoin],
+      });
+    } else if (buyAmount > 1n) {
+      const [zeroCoin, issueCoin] = tx.splitCoins(tx.gas, [tx.pure(0), tx.pure(coinAmount)]);
+      tx.moveCall({
+        target: `${this.packageId}::socialcoin::buy_shares`,
+        arguments: [tx.object(this.globalId), tx.pure(subject), tx.pure(1), zeroCoin],
+      });
+      tx.moveCall({
+        target: `${this.packageId}::socialcoin::buy_shares`,
+        arguments: [tx.object(this.globalId), tx.pure(subject), tx.pure(buyAmount - 1n), issueCoin],
+      });
+    } else {
+      throw new Error('buyAmount must be greater than 0');
+    }
+    const issueTxn = await sendTx(tx, signer);
+    console.log('issueTxn', JSON.stringify(issueTxn, null, 2));
+    return issueTxn;
+  }
+
   async buyShares(signer: Ed25519Keypair, subject: string, amount: bigint) {
     const coinAmount = await this.getBuyPriceAfterFee(subject, amount, signer.toSuiAddress());
     console.log({
@@ -279,7 +343,8 @@ class SocialCoin {
 async function interact(appMeta: AppMeta, signer: Ed25519Keypair, user: Ed25519Keypair) {
   // signer buy signer's first coin
   const socialCoin = new SocialCoin(appMeta, client);
-  await socialCoin.buyShares(signer, signer.toSuiAddress(), 1n);
+  await socialCoin.issue(signer, 1n);
+  await socialCoin.issue(user, 3n);
   await socialCoin.buyShares(signer, signer.toSuiAddress(), 1n);
   // user buy signer's coin
   await socialCoin.buyShares(user, signer.toSuiAddress(), 1n);
