@@ -323,6 +323,24 @@ class SocialCoin {
       target: `${this.packageId}::socialcoin::buy_shares`,
       arguments: [tx.object(this.globalId), tx.pure(subject), tx.pure(amount), prepareAmountRes.txCoin],
     });
+    // preview
+    const preview = await this.client.devInspectTransactionBlock({
+      transactionBlock: tx,
+      sender: signer.toSuiAddress(),
+    });
+    console.log('preview', JSON.stringify(preview.events.parsedJson, null, 2));
+    // example
+    // {
+    //   "is_buy": true,
+    //   "protocol_sui_amount": "12000000",  // price without fee
+    //   "share_amount": "1",
+    //   "subject": "0x67a156739dda6d4ab39b0a817398190f5842168629686b91c0b9da9ae1a4aecb",
+    //   "subject_sui_amount": "8000000",
+    //   "sui_amount": "400000000",
+    //   "supply": "3",  // supply after buy
+    //   "trader": "0x1e37a9b8a30dabf1071aa7139f5b1385f3ccb62f1617c71db5204259d329a028"
+    // }
+    // send
     const buyShareTxn = await sendTx(tx, signer);
     console.log('buyShareTxn', JSON.stringify(buyShareTxn, null, 2));
     return buyShareTxn;

@@ -161,6 +161,9 @@ module socialcoin::socialcoin {
             *table_value = *table_value + value;
         } else {
             *table_value = *table_value - value;
+            if (*table_value == 0) {
+                table::remove(table, key);
+            };
         };
     }
 
