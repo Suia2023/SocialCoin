@@ -328,7 +328,7 @@ class SocialCoin {
       transactionBlock: tx,
       sender: signer.toSuiAddress(),
     });
-    console.log('preview', JSON.stringify(preview.events.parsedJson, null, 2));
+    console.log('preview', JSON.stringify((preview.events as any).parsedJson, null, 2));
     // example
     // {
     //   "is_buy": true,
