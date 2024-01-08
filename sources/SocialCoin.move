@@ -74,8 +74,8 @@ module socialcoin::socialcoin {
             id: object::new(ctx),
             config: Config {
                 protocol_fee_destination: sender(ctx),
-                protocol_fee_percent: 30000000,
-                subject_fee_percent: 20000000,
+                protocol_fee_percent: 10000000,
+                subject_fee_percent: 10000000,
             },
             shares: table::new(ctx),
             vault: balance::zero(),
