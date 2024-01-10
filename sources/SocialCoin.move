@@ -254,6 +254,9 @@ module socialcoin::socialcoin {
         assert!(*trader_balance >= amount, ERR_INSUFFICIENT_SHARES);
         *trader_balance = *trader_balance - amount;
         subject_share.supply = supply - amount;
+        if (*trader_balance == 0) {
+            table::remove(&mut subject_share.holders, trader);
+        };
         change_holding_data(global, trader, subject, amount, false, ctx);
         event::emit(TradeEvent {
             trader,
