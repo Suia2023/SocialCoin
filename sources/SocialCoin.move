@@ -36,6 +36,8 @@ module socialcoin::socialcoin {
         holders: Table<address, u64>,
         // total supply
         supply: u64,
+        // whether the social coin is initialized
+        initialized: bool,
         // subject => balance
         holding: Table<address, u64>,
     }
@@ -100,7 +102,7 @@ module socialcoin::socialcoin {
         let sum1 = if (supply == 0) { 0 } else { (supply - 1) * (supply) * (2 * (supply - 1) + 1) / 6 };
         let sum2 = if (supply == 0 && amount == 1) { 0 } else { (supply - 1 + amount) * (supply + amount) * (2 * (supply - 1 + amount) + 1) / 6 };
         let summation = sum2 - sum1;
-        summation * 100000000
+        summation * 10000000
     }
 
     public fun get_buy_price(global: &Global, subject: address, amount: u64): u64 {
@@ -141,6 +143,7 @@ module socialcoin::socialcoin {
             let shares = Shares {
                 holders: table::new(ctx),
                 supply: 0,
+                initialized: false,
                 holding: table::new(ctx),
             };
             table::add(&mut global.shares, subject, shares);
@@ -179,6 +182,9 @@ module socialcoin::socialcoin {
         let subject_share = table::borrow_mut(&mut global.shares, subject);
         let supply = subject_share.supply;
         assert!(supply > 0 || trader == subject, ERR_ONLY_SHARES_SUBJECT_CAN_BUY_FIRST_SHARE);
+        if(supply == 0) {
+            subject_share.initialized = true;
+        };
         let price = get_price(supply, amount);
         let protocol_fee = price * global.config.protocol_fee_percent / 1000000000;
         let subject_fee = price * global.config.subject_fee_percent / 1000000000;
