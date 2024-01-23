@@ -134,6 +134,14 @@ module socialcoin::socialcoin {
         price - protocol_fee - subject_fee
     }
 
+    public fun is_holder(global: &Global, user: address, subject: address): bool {
+        if (!table::contains(&global.shares, subject)) {
+            return false
+        };
+        let shares = table::borrow(&global.shares, subject);
+        table::contains(&shares.holders, user)
+    }
+
     fun ensure_share_created(
         global: &mut Global,
         subject: address,

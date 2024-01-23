@@ -1,10 +1,11 @@
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { getFullnodeUrl, SuiClient, SuiTransactionBlockResponse } from '@mysten/sui.js/client';
 import { getFaucetHost, requestSuiFromFaucetV0 } from '@mysten/sui.js/faucet';
-import { bcs } from '@mysten/bcs';
+import { BCS, getSuiMoveConfig, bcs } from '@mysten/bcs';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { execSync } from 'child_process';
 import path from 'path';
+import { MessageEncoder, MessageType } from './message_encoder';
 require('dotenv').config();
 
 const admin = Ed25519Keypair.fromSecretKey(Uint8Array.from(Buffer.from(process.env.KEY_PAIR_SEED!, 'hex')));
@@ -13,6 +14,9 @@ const client = new SuiClient({
   url: process.env.SUI_RPC_URL!,
 });
 const coinType = '0x2::sui::SUI';
+const CLOCK_ID = '0x6';
+const bcs_ser = new BCS(getSuiMoveConfig());
+const messageEncoder = new MessageEncoder();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -124,6 +128,7 @@ interface AppMeta {
   packageId: string;
   globalId: string;
   adminCapId?: string;
+  clubGlobalId?: string;
 }
 
 let tx = new TransactionBlock();
@@ -141,10 +146,14 @@ async function publishSocialCoin(signer: Ed25519Keypair): Promise<AppMeta> {
       (o) => o.type === 'created' && o.objectType.endsWith('::socialcoin::AdminCap'),
     )[0] as any
   ).objectId;
+  const clubGlobalId = (
+    publishTxn.objectChanges!.filter((o) => o.type === 'created' && o.objectType.endsWith('::club::Global'))[0] as any
+  ).objectId;
   return {
     packageId,
     globalId,
     adminCapId,
+    clubGlobalId,
   };
 }
 
@@ -386,6 +395,113 @@ async function queries(appMeta: AppMeta) {
   console.log('buyPrice', buyPrice);
 }
 
+async function interactWithClub(appMeta: AppMeta, subject: Ed25519Keypair, user: Ed25519Keypair) {
+  const subjectAddr = subject.toSuiAddress();
+  const userAddr = user.toSuiAddress();
+  // new message
+  let rawMsg = 'suia to da moon';
+  let msg = messageEncoder.encode(rawMsg, MessageType.XOR);
+  const msgParam = bcs_ser.ser('vector<u8>', msg).toBytes();
+  console.log(`raw message: ${rawMsg}, encoded message: ${msg}`);
+  let tx = new TransactionBlock();
+  for (let i = 0; i < 10; i++) {
+    tx.moveCall({
+      target: `${appMeta.packageId}::club::new_message`,
+      arguments: [
+        tx.object(CLOCK_ID),
+        tx.object(appMeta.globalId),
+        tx.object(appMeta.clubGlobalId!),
+        tx.pure(subjectAddr),
+        tx.pure(msgParam),
+      ],
+    });
+  }
+  const newMessageTxn = await sendTx(tx, user);
+  console.log('newMessageTxn', JSON.stringify(newMessageTxn, null, 2));
+
+  // get messages
+  const clubObj = await client.getObject({
+    id: appMeta.clubGlobalId!,
+    options: {
+      showContent: true,
+    },
+  });
+  console.log('clubObj', JSON.stringify(clubObj, null, 2));
+  // this param is not changed after it is created, can be cached in front end
+  const clubsTableId = (clubObj.data!.content as any).fields.clubs.fields.id.id;
+  // get club object of subject
+  await sleep(3000);
+  const subjectClubObj = await client.getDynamicFieldObject({
+    parentId: clubsTableId,
+    name: {
+      type: 'address',
+      value: subjectAddr,
+    },
+  });
+  console.log('subjectClubObj', JSON.stringify(subjectClubObj, null, 2));
+  const clubMsgSize = parseInt(
+    (subjectClubObj.data!.content as any).fields.value.fields.messages.fields.contents.fields.size,
+  );
+  const clubMsgTableId = (subjectClubObj.data!.content as any).fields.value.fields.messages.fields.contents.fields.id
+    .id;
+  console.log('clubMsgSize', clubMsgSize);
+  // this is also not changed after it is created, can be cached in front end
+  // by mapping (tokenOwner => clubMsgTableId)
+  console.log('clubMsgTableId', clubMsgTableId);
+  console.log(`first message: ${JSON.stringify(await getMsg(clubMsgTableId, 0), null, 2)}`);
+  const latestMsgs = await getMsgs(clubMsgTableId, clubMsgSize - 5, 5);
+  console.log('latest5Msgs', JSON.stringify(latestMsgs, null, 2));
+
+  // delete the first message
+  tx = new TransactionBlock();
+  tx.moveCall({
+    target: `${appMeta.packageId}::club::delete_message`,
+    arguments: [tx.object(appMeta.clubGlobalId!), tx.pure(subjectAddr), tx.pure(0)],
+  });
+  const deleteMessageTxn = await sendTx(tx, user);
+  console.log('deleteMessageTxn', JSON.stringify(deleteMessageTxn, null, 2));
+  // check effect
+  console.log(`first message: ${JSON.stringify(await getMsg(clubMsgTableId, 0), null, 2)}`);
+}
+
+interface ClubMsg {
+  content: string;
+  sender: string;
+  timestamp: number;
+  deleted: boolean;
+}
+
+async function getMsg(clubMsgTableId: string, index: number): Promise<ClubMsg> {
+  const msg = await client.getDynamicFieldObject({
+    parentId: clubMsgTableId,
+    name: {
+      type: 'u64',
+      value: index.toString(),
+    },
+  });
+  // console.log('msg', JSON.stringify(msg, null, 2));
+  const content = (msg.data!.content as any).fields.value.fields;
+  const clubMsg = {
+    content: '',
+    sender: content.sender,
+    timestamp: parseInt(content.timestamp),
+    deleted: content.deleted,
+  };
+  if (!clubMsg.deleted) {
+    clubMsg.content = messageEncoder.decode(Uint8Array.from(content.content));
+  }
+  return clubMsg;
+}
+
+async function getMsgs(clubMsgTableId: string, offset: number, limit: number): Promise<ClubMsg[]> {
+  const futures = [];
+  for (let i = offset; i < offset + limit; i++) {
+    futures.push(getMsg(clubMsgTableId, i));
+  }
+  const msgs = await Promise.all(futures);
+  return msgs;
+}
+
 async function main() {
   console.log('-----start-----');
   const addr = admin.toSuiAddress();
@@ -412,16 +528,20 @@ async function main() {
   // publish
   const appMeta = await publishSocialCoin(admin);
   // const appMeta = {
-  //   "packageId": "0x34f1d3eee4bde2f3cd0ed121cdc36c3fd949c0abc0a9c9378d3ace2f6920137f",
-  //   "globalId": "0x2f12e91d2271d5c8fd5e6afa56c6d3d377edddb11bb669930624d6d2e12f93dc",
-  //   "adminCapId": "0x04ef6e4965090d41440bba2c92fafa6cc311e0e0050e9d627b829540f2e61cc5"
+  //   "packageId": "0x09c24ff60b8b83e058f6bc8feb5a4ad26436645f8c5582b49a487cfa540e84f0",
+  //   "globalId": "0xcc50dc2e2c30f3dbc0d7637d96c7ffd5c7834c66a3207ab157b790eef27d7976",
+  //   "adminCapId": "0x5ce7230a740f6ed4b86a599945d8a16ec7794fd99f5f1b5b49e9cd391eeb4cef",
+  //   "clubGlobalId": "0x9afc0130704eeca0efd03b6a08886b54752d1d2fcbf7f623c6ead0e46d820956",
   // }
 
   console.log(`appMeta: ${JSON.stringify(appMeta, null, 2)}`);
 
-  // txs
+  // social coin txs
   await interact(appMeta, admin, user);
   await queries(appMeta);
+
+  // club txs
+  await interactWithClub(appMeta, admin, user);
   console.log('-----end-----');
 }
 
