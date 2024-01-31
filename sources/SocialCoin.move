@@ -288,6 +288,15 @@ module socialcoin::socialcoin {
         transfer_from_vault(global, protocol_fee, protocol_fee_destination, ctx);
     }
 
+    public fun withdraw(
+        global: &mut Global,
+        _: &AdminCap,
+        ctx: &mut TxContext,
+    ) {
+        let left = balance::value(&global.vault);
+        transfer_from_vault(global, left, sender(ctx), ctx);
+    }
+
     #[test]
     fun test_social_coin() {
         let admin = @0xBABE;
