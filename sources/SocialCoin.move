@@ -19,6 +19,7 @@ module socialcoin::socialcoin {
     const ERR_SUBJECT_NOT_FOUND: u64 = 3;
     const ERR_INSUFFICIENT_SHARES: u64 = 4;
     const ERR_INSUFFICIENT_SUPPLY: u64 = 5;
+    const ERR_INVALID_AMOUNT: u64 = 6;
 
     struct SOCIALCOIN has drop {}
 
@@ -288,11 +289,33 @@ module socialcoin::socialcoin {
         transfer_from_vault(global, protocol_fee, protocol_fee_destination, ctx);
     }
 
+    public fun transfer(
+        global: &mut Global,
+        subject: address,
+        amount: u64,
+        to: address,
+        ctx: &mut TxContext,
+    ) {
+        assert!(amount > 0, ERR_INVALID_AMOUNT);
+        let from = sender(ctx);
+        assert!(table::contains(&global.shares, from), ERR_INSUFFICIENT_SHARES);
+        let from_share = table::borrow_mut(&mut global.shares, from);
+        assert!(table::contains(&from_share.holding, subject), ERR_INSUFFICIENT_SHARES);
+        let from_holding = table::borrow_mut(&mut from_share.holding, subject);
+        assert!(*from_holding >= amount, ERR_INSUFFICIENT_SHARES);
+        *from_holding = *from_holding - amount;
+        change_holding_data(global, to, subject, amount, true, ctx);
+        let subject_share = table::borrow_mut(&mut global.shares, subject);
+        change_table_value(&mut subject_share.holders, from, amount, false);
+        change_table_value(&mut subject_share.holders, to, amount, true);
+    }
+
     #[test]
     fun test_social_coin() {
         let admin = @0xBABE;
         let user1 = @0xFACE;
         let user2 = @0xCAFE;
+        let user3 = @0xBEEF;
 
         let scenario_val = test_scenario::begin(admin);
         let scenario = &mut scenario_val;
@@ -344,17 +367,33 @@ module socialcoin::socialcoin {
 
         // user2 sell user1's share
         test_scenario::next_tx(scenario, user2);
-        sell_shares(&mut global, user1, 1, test_scenario::ctx(scenario));
+        let sell_amount = 1;
+        sell_shares(&mut global, user1, sell_amount, test_scenario::ctx(scenario));
         test_scenario::next_tx(scenario, user2);
 
         let user1_share = table::borrow(&global.shares, user1);
-        assert!(*table::borrow(&user1_share.holders, user2) == amount - 1, 0);
+        assert!(*table::borrow(&user1_share.holders, user2) == amount - sell_amount, 0);
         let user2_share = table::borrow(&global.shares, user2);
-        assert!(*table::borrow(&user2_share.holding, user1) == amount - 1, 0);
+        assert!(*table::borrow(&user2_share.holding, user1) == amount - sell_amount, 0);
 
+        // user2 transfer user1's share to user3
         test_scenario::next_tx(scenario, user2);
-        sell_shares(&mut global, user1, amount - 1, test_scenario::ctx(scenario));
+        let transfer_amount = amount - sell_amount - 1;
+        transfer(&mut global, user1, transfer_amount, user3, test_scenario::ctx(scenario));
         test_scenario::next_tx(scenario, user2);
+        let user1_share = table::borrow(&global.shares, user1);
+        assert!(*table::borrow(&user1_share.holders, user2) == amount - sell_amount - transfer_amount, 0);
+        assert!(*table::borrow(&user1_share.holders, user3) == transfer_amount, 0);
+        let user2_share = table::borrow(&global.shares, user2);
+        assert!(*table::borrow(&user2_share.holding, user1) == amount - sell_amount - transfer_amount, 0);
+        let user3_share = table::borrow(&global.shares, user3);
+        assert!(*table::borrow(&user3_share.holding, user1) == transfer_amount, 0);
+
+        // sell all left coins and vault should be empty
+        test_scenario::next_tx(scenario, user2);
+        sell_shares(&mut global, user1, amount - sell_amount - transfer_amount, test_scenario::ctx(scenario));
+        test_scenario::next_tx(scenario, user3);
+        sell_shares(&mut global, user1, transfer_amount, test_scenario::ctx(scenario));
         assert!(balance::value(&global.vault) == 0, 0);
 
         // end test
