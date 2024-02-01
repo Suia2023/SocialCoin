@@ -101,7 +101,7 @@ module socialcoin::socialcoin {
 
     public fun get_price(supply: u64, amount: u64): u64 {
         let sum1 = if (supply == 0) { 0 } else { (supply - 1) * (supply) * (2 * (supply - 1) + 1) / 6 };
-        let sum2 = if (supply == 0 && amount == 1) { 0 } else { (supply - 1 + amount) * (supply + amount) * (2 * (supply - 1 + amount) + 1) / 6 };
+        let sum2 = if (supply == 0 && amount == 1) { 0 } else { (supply + amount - 1) * (supply + amount) * (2 * (supply + amount - 1) + 1) / 6 };
         let summation = sum2 - sum1;
         summation * 10000000
     }
@@ -186,12 +186,13 @@ module socialcoin::socialcoin {
         coin: Coin<sui::SUI>,
         ctx: &mut TxContext,
     ) {
+        assert!(amount > 0, ERR_INVALID_AMOUNT);
         let trader = sender(ctx);
         ensure_share_created(global, subject, ctx);
         let subject_share = table::borrow_mut(&mut global.shares, subject);
         let supply = subject_share.supply;
-        assert!(supply > 0 || trader == subject, ERR_ONLY_SHARES_SUBJECT_CAN_BUY_FIRST_SHARE);
-        if(supply == 0) {
+        if(!subject_share.initialized) {
+            assert!(trader == subject, ERR_ONLY_SHARES_SUBJECT_CAN_BUY_FIRST_SHARE);
             subject_share.initialized = true;
         };
         let price = get_price(supply, amount);
@@ -308,6 +309,11 @@ module socialcoin::socialcoin {
         let subject_share = table::borrow_mut(&mut global.shares, subject);
         change_table_value(&mut subject_share.holders, from, amount, false);
         change_table_value(&mut subject_share.holders, to, amount, true);
+    }
+
+    #[test]
+    fun test_price() {
+        assert!(get_price(0, 5) + get_price(5, 2) == get_price(0, 7), 0);
     }
 
     #[test]
