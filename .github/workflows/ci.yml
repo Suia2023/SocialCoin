@@ -46,5 +46,6 @@ jobs:
         with:
           version: 8.6.2
       - run: pnpm install
+      - run: pnpm test
       - run: cp .env.example .env
       - run: REQUEST_SUI=1 task demo

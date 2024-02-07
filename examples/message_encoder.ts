@@ -7,9 +7,7 @@ export class MessageEncoder {
   private xor_key = 'suia';
 
   public encode(raw_message: string, type: MessageType): Uint8Array {
-    let encoded = new Uint8Array(raw_message.length + 1);
-    let uint8Array = new Uint8Array(raw_message.length);
-    encoded[0] = type;
+    let uint8Array;
     if (type == MessageType.RAW) {
       uint8Array = this.encode_raw(raw_message);
     } else if (type == MessageType.XOR) {
@@ -17,6 +15,8 @@ export class MessageEncoder {
     } else {
       throw new Error('Unsupported message type');
     }
+    let encoded = new Uint8Array(uint8Array.length + 1);
+    encoded[0] = type;
     encoded.set(uint8Array, 1);
     return encoded;
   }
