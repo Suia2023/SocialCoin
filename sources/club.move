@@ -83,7 +83,7 @@ module socialcoin::club {
         let club = table::borrow_mut(&mut club_global.clubs, club_owner);
         assert!(message_index < table_vec::length(&club.messages), ERR_MESSAGE_NOT_FOUND);
         let message = table_vec::borrow_mut(&mut club.messages, message_index);
-        assert!(message.sender == sender || club_global.admin == sender, ERR_NOT_AUTHORIZED);
+        assert!(message.sender == sender, ERR_NOT_AUTHORIZED);
         assert!(!message.deleted, ERR_MESSAGE_DELETED);
         message.content = vector::empty();
         message.deleted = true;
