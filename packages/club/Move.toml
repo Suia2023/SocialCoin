@@ -1,11 +1,12 @@
 [package]
-name = "SocialCoin"
+name = "club"
 version = "1.0.0"
-published-at = "0x782716705e81a98a80d3eca78ab2ecf5fe8586b804aefc8ffb7ec0fb3b04df88"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.13.0" }
+SocialCoin = { local = "../.." }
 
 [addresses]
-socialcoin = "0x782716705e81a98a80d3eca78ab2ecf5fe8586b804aefc8ffb7ec0fb3b04df88"
+club = "0x0"
 sui =  "0x2"
+social_coin = "0x782716705e81a98a80d3eca78ab2ecf5fe8586b804aefc8ffb7ec0fb3b04df88"

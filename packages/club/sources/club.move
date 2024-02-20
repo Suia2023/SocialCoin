@@ -1,4 +1,4 @@
-module socialcoin::club {
+module club::club {
     use std::vector;
     use sui::clock::{Clock, timestamp_ms};
     use sui::table_vec;

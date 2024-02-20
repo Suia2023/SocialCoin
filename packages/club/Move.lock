@@ -2,10 +2,11 @@
 
 [move]
 version = 0
-manifest_digest = "53778E8270EF9C2EB1DAEC9B858A5BD2645CAB561CA364E7D55A4415F5DCFB32"
-deps_digest = "F8BBB0CCB2491CA29A3DF03D6F92277A4F3574266507ACD77214D37ECA3F3082"
+manifest_digest = "2954B8D8F51D861A3E9AC352098CE4900D4A46FE004F07AC3760F614EF4EFA1F"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 
 dependencies = [
+  { name = "SocialCoin" },
   { name = "Sui" },
 ]
 
@@ -14,14 +15,17 @@ name = "MoveStdlib"
 source = { git = "https://github.com/MystenLabs/sui.git", rev = "mainnet-v1.13.0", subdir = "crates/sui-framework/packages/move-stdlib" }
 
 [[move.package]]
+name = "SocialCoin"
+source = { local = "../.." }
+
+dependencies = [
+  { name = "Sui" },
+]
+
+[[move.package]]
 name = "Sui"
 source = { git = "https://github.com/MystenLabs/sui.git", rev = "mainnet-v1.13.0", subdir = "crates/sui-framework/packages/sui-framework" }
 
 dependencies = [
   { name = "MoveStdlib" },
 ]
-
-[move.toolchain-version]
-compiler-version = "1.17.3"
-edition = "legacy"
-flavor = "sui"
